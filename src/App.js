@@ -2,7 +2,6 @@ import { Console } from "@woowacourse/mission-utils";
 
 class App {
   async run() {
-    // 테스트에서 run() 결과를 검증하므로, 내부에서 에러를 catch하지 않습니다.
     Console.print("덧셈할 문자열을 입력해 주세요.");
     const input = await Console.readLineAsync();
 
@@ -34,21 +33,37 @@ class App {
     // 기본 구분자: , 또는 :
     const defaultDelimiters = /,|:/;
 
-    // 커스텀 구분자: //X\n...
-    if (input.startsWith("//")) {
-      // 한 글자 구분자만 허용
-      const m = input.match(/^\/\/(.)\n([\s\S]*)$/);
-      if (!m)
-        throw new Error("[ERROR] 커스텀 구분자 형식이 올바르지 않습니다.");
-
-      const [, custom, expression] = m;
-      const escaped = custom.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
-      // 기본 구분자(, :)도 항상 함께 허용
-      const combined = new RegExp(`[${escaped},:]`);
-      return { delimiter: combined, expression };
+    if (!input.startsWith("//")) {
+      return { delimiter: defaultDelimiters, expression: input };
     }
 
-    return { delimiter: defaultDelimiters, expression: input };
+    // 헤더 구분 위치 탐색: \n, \r, 또는 리터럴 "\\n"
+    const idxLF = input.indexOf("\n"); // LF
+    const idxCR = input.indexOf("\r"); // CR
+    const idxLIT = input.indexOf("\\n"); // literal "\n"
+
+    const candidates = [idxLF, idxCR, idxLIT].filter((i) => i >= 0);
+    if (candidates.length === 0) {
+      throw new Error("[ERROR] 커스텀 구분자 형식이 올바르지 않습니다.");
+    }
+    const nl = Math.min(...candidates);
+
+    // 커스텀 구분자 추출 (CR 제거)
+    const rawCustom = input.slice(2, nl);
+    const custom = rawCustom.replace(/\r/g, "");
+    if (custom.length !== 1) {
+      throw new Error("[ERROR] 커스텀 구분자는 한 글자여야 합니다.");
+    }
+
+    // 표현식 시작 위치: 실제 개행(\n 또는 \r)이면 +1, 리터럴 "\\n"이면 +2
+    const isLiteral = nl === idxLIT;
+    const exprStart = nl + (isLiteral ? 2 : 1);
+    const expression = input.slice(exprStart);
+
+    const escaped = custom.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+    // 기본 구분자(, :)도 항상 함께 허용
+    const combined = new RegExp(`[${escaped},:]`);
+    return { delimiter: combined, expression };
   }
 }
 
