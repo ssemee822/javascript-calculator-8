@@ -2,46 +2,53 @@ import { Console } from "@woowacourse/mission-utils";
 
 class App {
   async run() {
+    // 테스트에서 run() 결과를 검증하므로, 내부에서 에러를 catch하지 않습니다.
     Console.print("덧셈할 문자열을 입력해 주세요.");
     const input = await Console.readLineAsync();
 
     const result = this.#calculate(input);
     Console.print(`결과 : ${result}`);
+    return result;
   }
 
-  // 커스텀 구분자(//X\n) + 기본 구분자(, :) 동시 처리
   #calculate(input) {
     if (input === "") return 0;
 
-    const { custom, body } = this.#pickDelimiterHeader(input);
-    const tokens = this.#split(body, custom);
-    const numbers = tokens.map((t) => Number(t));
-    return numbers.reduce((acc, n) => acc + n, 0);
+    const { delimiter, expression } = this.#parseHeader(input);
+    const tokens = expression.split(delimiter);
+
+    const numbers = tokens.map((token) => {
+      if (token === "")
+        throw new Error("[ERROR] 비어 있는 값이 포함되었습니다.");
+      if (!/^\d+$/.test(token))
+        throw new Error("[ERROR] 숫자만 입력할 수 있습니다.");
+      const n = Number(token);
+      if (n < 0) throw new Error("[ERROR] 음수는 허용되지 않습니다.");
+      return n;
+    });
+
+    return numbers.reduce((a, b) => a + b, 0);
   }
 
-  // //X\n 형식 파싱
-  #pickDelimiterHeader(input) {
-    if (!input.startsWith("//")) return { custom: null, body: input };
+  #parseHeader(input) {
+    // 기본 구분자: , 또는 :
+    const defaultDelimiters = /,|:/;
 
-    const nl = input.indexOf("\n");
-    const custom = input.slice(2, nl);
-    const body = input.slice(nl + 1);
-    return { custom, body };
-  }
+    // 커스텀 구분자: //X\n...
+    if (input.startsWith("//")) {
+      // 한 글자 구분자만 허용
+      const m = input.match(/^\/\/(.)\n([\s\S]*)$/);
+      if (!m)
+        throw new Error("[ERROR] 커스텀 구분자 형식이 올바르지 않습니다.");
 
-  // 기본(, :) + 커스텀(있으면)으로 분리
-  #split(str, custom) {
-    const delims = [",", ":"];
-    if (custom) delims.push(custom);
+      const [, custom, expression] = m;
+      const escaped = custom.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+      // 기본 구분자(, :)도 항상 함께 허용
+      const combined = new RegExp(`[${escaped},:]`);
+      return { delimiter: combined, expression };
+    }
 
-    const escaped = delims.map(this.#escapeForCharClass).join("");
-    const re = new RegExp(`[${escaped}]`);
-    return str.split(re);
-  }
-
-  // 정규식 문자클래스 이스케이프
-  #escapeForCharClass(ch) {
-    return ch.replace(/[-\\^$*+?.()|[\]{}]/g, "\\$&");
+    return { delimiter: defaultDelimiters, expression: input };
   }
 }
 
